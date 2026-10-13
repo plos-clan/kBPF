@@ -46,20 +46,27 @@ data class BpfInsn(val cmd: UByteArray) {
 
     fun insnClass(): UByte = code and 0x07u
 
-    fun insnSrc() : UByte = code and 0x08u
+    fun insnSrc(): UByte = code and 0x08u
 
     fun insnOpcode(): UByte = code and 0xF0u
 
     override fun toString(): String = "{opcode=$code, srcReg=$srcReg, dstReg=$dstReg, offset=$offset, imm=$imm}"
 }
 
+fun BpfRuntime.getSrcValue(cmd: BpfInsn): ULong =
+    if (cmd.insnSrc() == BpfInsn.BPF_X) {
+        this.register[cmd.srcReg]
+    } else {
+        cmd.imm.toLong().toULong()
+    }
+
 fun BpfRuntime.getNextCommand(): BpfInsn? {
-    if(this.register.pc >= this.insnList.size) return null
+    if (this.register.pc >= this.insnList.size) return null
     val insn = this.insnList[this.register.pc]
     this.register.pc++
     return insn
 }
 
-fun BpfInsn.isExit() : Boolean {
+fun BpfInsn.isExit(): Boolean {
     return this.code == (BpfInsn.BPF_JMP or BPF_EXIT)
 }

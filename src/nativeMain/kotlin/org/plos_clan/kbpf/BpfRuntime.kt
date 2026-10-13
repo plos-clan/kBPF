@@ -5,6 +5,8 @@ import org.plos_clan.kbpf.instruction.alu64Dispatch
 import org.plos_clan.kbpf.instruction.getNextCommand
 import org.plos_clan.kbpf.instruction.isExit
 import org.plos_clan.kbpf.instruction.jmpDispatch
+import org.plos_clan.kbpf.util.BpfException
+import org.plos_clan.kbpf.util.VerifierException
 import org.plos_clan.kbpf.verifier.Verifier
 
 class Registers {
@@ -36,7 +38,7 @@ class BpfRuntime(
     val source: UByteArray
 ) {
     init {
-        require(source.size % 8 == 0) { "eBPF program size must be multiple of 8" }
+        if (source.size % 8 != 0) throw VerifierException("eBPF program size must be multiple of 8")
     }
 
     val register = Registers()
@@ -45,19 +47,24 @@ class BpfRuntime(
         BpfInsn(source.copyOfRange(offset, offset + 8))
 
     }
+    val callStack = ArrayDeque<Int>()
 
-    fun run() : ULong {
+    fun run(): ULong {
         this.status = Status.CHECKING
         Verifier.checkSource(this.insnList)
         this.status = Status.RUNNING
         while (true) {
-            val cmd = this.getNextCommand() ?: error("failed to run ebpf command: illegal end")
-            if (cmd.isExit()) break
-            when(cmd.insnClass()) {
+            val cmd = this.getNextCommand() ?: throw BpfException("failed to run ebpf command: illegal end")
+            if (cmd.isExit()) if(callStack.isNotEmpty()) {
+                this.register.pc = callStack.removeLast()
+                continue
+            }else break
+            when (cmd.insnClass()) {
                 BpfInsn.BPF_ALU64 -> this.alu64Dispatch(cmd)
                 BpfInsn.BPF_JMP -> this.jmpDispatch(cmd)
             }
         }
+        this.status = Status.EXITED
         return this.register[Registers.R0]
     }
 
