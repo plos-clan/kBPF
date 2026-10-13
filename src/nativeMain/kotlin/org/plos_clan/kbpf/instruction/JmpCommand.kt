@@ -15,13 +15,18 @@ const val BPF_EXIT: UByte = 0x90u
 
 fun BpfRuntime.jmpDispatch(cmd: BpfInsn) {
     when (cmd.insnOpcode()) {
+        BPF_JA -> this.ja(cmd)
         BPF_JGT -> this.jgt(cmd)
     }
 }
 
+fun BpfRuntime.ja(cmd: BpfInsn) {
+    this.register.pc += cmd.offset
+}
+
 fun BpfRuntime.jgt(cmd: BpfInsn) {
-    val source: ULong = if(cmd.insnSrc() == BpfInsn.BPF_X) {
+    val source: ULong = if (cmd.insnSrc() == BpfInsn.BPF_X) {
         this.register[cmd.srcReg]
-    }else cmd.imm.toULong()
-    if(this.register[cmd.dstReg] > source) this.register.pc += cmd.offset
+    } else cmd.imm.toULong()
+    if (this.register[cmd.dstReg] > source) this.register.pc += cmd.offset
 }
