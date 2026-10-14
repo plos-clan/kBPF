@@ -2,7 +2,6 @@ package org.plos_clan.kbpf.instruction
 
 import org.plos_clan.kbpf.BpfRuntime
 import org.plos_clan.kbpf.Registers
-import org.plos_clan.kbpf.lib.callHelper
 import org.plos_clan.kbpf.util.BpfException
 
 const val BPF_JA: UByte = 0x00u
@@ -15,8 +14,8 @@ const val BPF_JSGT: UByte = 0x60u
 const val BPF_JSGE: UByte = 0x70u
 const val BPF_CALL: UByte = 0x80u
 const val BPF_EXIT: UByte = 0x90u
-const val BPF_JLT:  UByte = 0xa0u
-const val BPF_JLE:  UByte = 0xb0u
+const val BPF_JLT: UByte = 0xa0u
+const val BPF_JLE: UByte = 0xb0u
 const val BPF_JSLT: UByte = 0xc0u
 const val BPF_JSLE: UByte = 0xd0u
 
@@ -98,7 +97,7 @@ fun BpfRuntime.jlt(cmd: BpfInsn) {
     if (this.register[cmd.dstReg] < source) this.register.pc += cmd.offset
 }
 
-fun BpfRuntime.call(cmd: BpfInsn) : Unit = when (cmd.srcReg.toInt()) {
+fun BpfRuntime.call(cmd: BpfInsn): Unit = when (cmd.srcReg.toInt()) {
     0, 2 -> {
         val id = cmd.imm
         val arg1 = register[Registers.R1]
@@ -106,11 +105,16 @@ fun BpfRuntime.call(cmd: BpfInsn) : Unit = when (cmd.srcReg.toInt()) {
         val arg3 = register[Registers.R3]
         val arg4 = register[Registers.R4]
         val arg5 = register[Registers.R5]
-        register[Registers.R0] = callHelper(id ,arg1, arg2, arg3, arg4, arg5)
+
+        register[Registers.R0] =
+            if (cmd.srcReg.toInt() == 0) helper.callHelper(id, arg1, arg2, arg3, arg4, arg5)
+            else helper.callKfunc(id, arg1, arg2, arg3, arg4, arg5)
     }
+
     1 -> {
         callStack.addLast(register.pc)
         register.pc += cmd.imm
     }
+
     else -> throw BpfException("Invalid CALL src_reg: ${cmd.srcReg}")
 }

@@ -5,6 +5,7 @@ import org.plos_clan.kbpf.instruction.alu64Dispatch
 import org.plos_clan.kbpf.instruction.getNextCommand
 import org.plos_clan.kbpf.instruction.isExit
 import org.plos_clan.kbpf.instruction.jmpDispatch
+import org.plos_clan.kbpf.lib.HelperLibrary
 import org.plos_clan.kbpf.util.BpfException
 import org.plos_clan.kbpf.util.VerifierException
 import org.plos_clan.kbpf.verifier.Verifier
@@ -48,6 +49,8 @@ class BpfRuntime(
 
     }
     val callStack = ArrayDeque<Int>()
+
+    val helper = HelperLibrary(this)
 
     fun run(): ULong {
         this.status = Status.CHECKING
