@@ -2,6 +2,7 @@ package org.plos_clan.kbpf.instruction
 
 import org.plos_clan.kbpf.BpfRuntime
 import org.plos_clan.kbpf.Registers
+import org.plos_clan.kbpf.StackFrame
 import org.plos_clan.kbpf.util.BpfException
 
 const val BPF_JA: UByte = 0x00u
@@ -112,7 +113,14 @@ fun BpfRuntime.call(cmd: BpfInsn): Unit = when (cmd.srcReg.toInt()) {
     }
 
     1 -> {
-        callStack.addLast(register.pc)
+        val newFrame = StackFrame(pc = register.pc)
+        register.registers.copyInto(
+            destination = newFrame.registers,
+            destinationOffset = 0,
+            startIndex = 6,
+            endIndex = 11
+        )
+        callStack.addLast(newFrame)
         register.pc += cmd.imm
     }
 

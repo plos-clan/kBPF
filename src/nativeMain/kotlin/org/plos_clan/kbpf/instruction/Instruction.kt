@@ -2,8 +2,7 @@ package org.plos_clan.kbpf.instruction
 
 import org.plos_clan.kbpf.BpfRuntime
 
-data class BpfInsn(val cmd: UByteArray) {
-
+abstract class BpfInsn(val cmd: UByteArray) {
     companion object {
         const val BPF_LD: UByte = 0u
         const val BPF_LDX: UByte = 1u
@@ -18,10 +17,6 @@ data class BpfInsn(val cmd: UByteArray) {
         const val BPF_X: UByte = 0x8u // register
     }
 
-    init {
-        require(cmd.size >= 8) { "eBPF instruction must be 8 bytes" }
-    }
-
     val code: UByte get() = cmd[0]
     val dstReg: UByte get() = cmd[1] and 0X0FU
     val srcReg: UByte get() = (cmd[1].toUInt() shr 4).toUByte()
@@ -33,6 +28,21 @@ data class BpfInsn(val cmd: UByteArray) {
                 ((cmd[5].toInt() and 0xFF) shl 8) or
                 (cmd[4].toInt() and 0xFF)
 
+
+    fun insnClass(): UByte = code and 0x07u
+
+    fun insnSrc(): UByte = code and 0x08u
+
+    fun insnOpcode(): UByte = code and 0xF0u
+
+    override fun toString(): String = "{opcode=$code, srcReg=$srcReg, dstReg=$dstReg, offset=$offset, imm=$imm}"
+}
+
+class BpfShortInsn(shortCmd: UByteArray) : BpfInsn(shortCmd) {
+    init {
+        require(cmd.size >= 8) { "eBPF instruction must be 8 bytes" }
+    }
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
@@ -43,14 +53,22 @@ data class BpfInsn(val cmd: UByteArray) {
     override fun hashCode(): Int {
         return cmd.contentHashCode()
     }
+}
 
-    fun insnClass(): UByte = code and 0x07u
+class BpfLongInsn(val fstCmd: UByteArray, val secCmd: UByteArray) : BpfInsn(fstCmd) {
+    fun getFullImmediate(): ULong {
+        val low32 = (fstCmd[4].toULong() or
+                (fstCmd[5].toULong() shl 8) or
+                (fstCmd[6].toULong() shl 16) or
+                (fstCmd[7].toULong() shl 24)) and 0xFFFFFFFFUL
 
-    fun insnSrc(): UByte = code and 0x08u
+        val high32 = (secCmd[4].toULong() or
+                (secCmd[5].toULong() shl 8) or
+                (secCmd[6].toULong() shl 16) or
+                (secCmd[7].toULong() shl 24)) and 0xFFFFFFFFUL
 
-    fun insnOpcode(): UByte = code and 0xF0u
-
-    override fun toString(): String = "{opcode=$code, srcReg=$srcReg, dstReg=$dstReg, offset=$offset, imm=$imm}"
+        return (high32 shl 32) or low32
+    }
 }
 
 fun BpfRuntime.getSrcValue(cmd: BpfInsn): ULong =

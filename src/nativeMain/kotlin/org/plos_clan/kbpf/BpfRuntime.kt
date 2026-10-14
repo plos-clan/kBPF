@@ -1,10 +1,6 @@
 package org.plos_clan.kbpf
 
-import org.plos_clan.kbpf.instruction.BpfInsn
-import org.plos_clan.kbpf.instruction.alu64Dispatch
-import org.plos_clan.kbpf.instruction.getNextCommand
-import org.plos_clan.kbpf.instruction.isExit
-import org.plos_clan.kbpf.instruction.jmpDispatch
+import org.plos_clan.kbpf.instruction.*
 import org.plos_clan.kbpf.lib.HelperLibrary
 import org.plos_clan.kbpf.util.BpfException
 import org.plos_clan.kbpf.util.VerifierException
@@ -25,13 +21,34 @@ class Registers {
         const val R10: UByte = 10u
     }
 
-    private val registers = ULongArray(11)
+    val registers = ULongArray(11)
 
     var pc: Int = 0 // insnList index
 
     operator fun get(index: UByte) = registers[index.toInt()]
     operator fun set(index: UByte, data: ULong) {
         registers[index.toInt()] = data
+    }
+}
+
+data class StackFrame(
+    val registers: ULongArray = ULongArray(5),
+    val stackMemory: ByteArray = ByteArray(512),
+    val pc: Int,
+) {
+    init {
+        require(registers.size == 5)
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+        other as StackFrame
+        return registers.contentEquals(other.registers)
+    }
+
+    override fun hashCode(): Int {
+        return registers.contentHashCode()
     }
 }
 
@@ -44,27 +61,36 @@ class BpfRuntime(
 
     val register = Registers()
     var status = Status.LOADED
-    val insnList: List<BpfInsn> = (source.indices step 8).map { offset ->
-        BpfInsn(source.copyOfRange(offset, offset + 8))
 
-    }
-    val callStack = ArrayDeque<Int>()
+    lateinit var insnList: List<BpfInsn>
+
+    val callStack = ArrayDeque<StackFrame>()
 
     val helper = HelperLibrary(this)
 
+    fun topStackFrame(): StackFrame = callStack.last()
+
     fun run(): ULong {
         this.status = Status.CHECKING
-        Verifier.checkSource(this.insnList)
+        this.insnList = Verifier.checkSource(source)
         this.status = Status.RUNNING
         while (true) {
             val cmd = this.getNextCommand() ?: throw BpfException("failed to run ebpf command: illegal end")
             if (cmd.isExit()) if(callStack.isNotEmpty()) {
-                this.register.pc = callStack.removeLast()
+                val frame = callStack.removeLast()
+                this.register.pc = frame.pc
+                frame.registers.copyInto(
+                    destination = register.registers,
+                    destinationOffset = 6,
+                    startIndex = 0,
+                    endIndex = 5
+                )
                 continue
             }else break
             when (cmd.insnClass()) {
                 BpfInsn.BPF_ALU64 -> this.alu64Dispatch(cmd)
                 BpfInsn.BPF_JMP -> this.jmpDispatch(cmd)
+                BpfInsn.BPF_LD -> this.ldDispatch(cmd)
             }
         }
         this.status = Status.EXITED
