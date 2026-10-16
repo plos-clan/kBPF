@@ -35,6 +35,10 @@ abstract class BpfInsn(val cmd: UByteArray) {
 
     fun insnOpcode(): UByte = code and 0xF0u
 
+    fun insnSize(): UByte = code and 0x18u
+
+    fun insnMode(): UByte = code and 0xE0u
+
     override fun toString(): String = "{opcode=$code, srcReg=$srcReg, dstReg=$dstReg, offset=$offset, imm=$imm}"
 }
 
@@ -74,9 +78,12 @@ class BpfLongInsn(val fstCmd: UByteArray, val secCmd: UByteArray) : BpfInsn(fstC
 fun BpfRuntime.getSrcValue(cmd: BpfInsn): ULong =
     if (cmd.insnSrc() == BpfInsn.BPF_X) {
         this.register[cmd.srcReg]
-    } else {
-        cmd.imm.toLong().toULong()
-    }
+    } else cmd.imm.toLong().toULong()
+
+fun BpfRuntime.getSrcValue32(cmd: BpfInsn): UInt =
+    if(cmd.insnSrc() == BpfInsn.BPF_X) {
+        this.register[cmd.srcReg].toUInt()
+    }else cmd.imm.toUInt()
 
 fun BpfRuntime.getNextCommand(): BpfInsn? {
     if (this.register.pc >= this.insnList.size) return null

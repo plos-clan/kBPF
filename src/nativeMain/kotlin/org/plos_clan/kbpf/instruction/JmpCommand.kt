@@ -113,16 +113,43 @@ fun BpfRuntime.call(cmd: BpfInsn): Unit = when (cmd.srcReg.toInt()) {
     }
 
     1 -> {
-        val newFrame = StackFrame(pc = register.pc)
+        val newFrame = createStackFrame(StackFrame.Type.USER,register.pc)
         register.registers.copyInto(
             destination = newFrame.registers,
             destinationOffset = 0,
             startIndex = 6,
             endIndex = 11
         )
-        callStack.addLast(newFrame)
         register.pc += cmd.imm
     }
 
     else -> throw BpfException("Invalid CALL src_reg: ${cmd.srcReg}")
+}
+
+fun BpfRuntime.executeJmp32(cmd: BpfInsn) {
+    val op = cmd.insnOpcode()
+    val dst32 = register[cmd.dstReg].toUInt()
+    val src32 = getSrcValue32(cmd)
+
+    val signedDst = dst32.toInt()
+    val signedSrc = src32.toInt()
+
+    val shouldJump = when (op) {
+        BPF_JEQ  -> dst32 == src32
+        BPF_JNE  -> dst32 != src32
+        BPF_JGT  -> dst32 >  src32
+        BPF_JGE  -> dst32 >= src32
+        BPF_JLT  -> dst32 <  src32
+        BPF_JLE  -> dst32 <= src32
+        BPF_JSET -> (dst32 and src32) != 0u
+        BPF_JSGT -> signedDst >  signedSrc
+        BPF_JSGE -> signedDst >= signedSrc
+        BPF_JSLT -> signedDst <  signedSrc
+        BPF_JSLE -> signedDst <= signedSrc
+        else -> throw IllegalArgumentException("Unsupported JMP32 op")
+    }
+
+    if (shouldJump) {
+        register.pc += cmd.offset
+    }
 }

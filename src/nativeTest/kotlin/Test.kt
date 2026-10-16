@@ -39,4 +39,13 @@ class BpfTest {
         val runtime = BpfRuntime(source)
         assertEquals(0UL,runtime.run())
     }
+
+    @Test
+    fun test3() {
+        val source = loadBin("bpf_base3.bin")
+        assertTrue(source.isNotEmpty())
+
+        val runtime = BpfRuntime(source)
+        assertEquals(2UL,runtime.run())
+    }
 }

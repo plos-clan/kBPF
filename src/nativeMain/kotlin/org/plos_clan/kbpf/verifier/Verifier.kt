@@ -5,6 +5,8 @@ import org.plos_clan.kbpf.instruction.BpfInsn
 import org.plos_clan.kbpf.instruction.BpfLongInsn
 import org.plos_clan.kbpf.instruction.BpfShortInsn
 import org.plos_clan.kbpf.util.VerifierException
+import org.plos_clan.kbpf.verifier.cmd.longCmdCheck
+import org.plos_clan.kbpf.verifier.cmd.shortCmdCheck
 
 object Verifier {
     fun checkSource(source: UByteArray): List<BpfInsn> {
@@ -21,10 +23,10 @@ object Verifier {
                     throw VerifierException("Invalid BPF Long bytecode: unexpected end of stream at offset $offset")
                 val secCmd = source.copyOfRange(offset + 8, offset + 16)
                 offset += 16
-                BpfLongInsn(fstCmd, secCmd)
+                longCmdCheck(BpfLongInsn(fstCmd, secCmd))
             }else {
                 offset += 8
-                BpfShortInsn(fstCmd)
+                shortCmdCheck(BpfShortInsn(fstCmd))
             }
             instructions += target
         }
