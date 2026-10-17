@@ -23,7 +23,7 @@ class BpfTest {
     }
 
     @Test
-    fun test() {
+    fun test_simple_jmp() {
         val source = loadBin("bpf_base1.bin")
         assertTrue(source.isNotEmpty())
 
@@ -32,7 +32,7 @@ class BpfTest {
     }
 
     @Test
-    fun test2() {
+    fun test_alu64_call() {
         val source = loadBin("bpf_base2.bin")
         assertTrue(source.isNotEmpty())
 
@@ -41,7 +41,7 @@ class BpfTest {
     }
 
     @Test
-    fun test3() {
+    fun test_memory() {
         val source = loadBin("bpf_base3.bin")
         assertTrue(source.isNotEmpty())
 

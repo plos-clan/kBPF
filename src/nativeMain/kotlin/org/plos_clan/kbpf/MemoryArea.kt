@@ -61,26 +61,92 @@ fun BpfInsn.accessSize(): AccessSize =
         else -> error("Invalid BPF size")
     }
 
+interface MemMapper {
+    fun address(): ULong
+    fun length(): ULong
+    fun close()
+}
+
+private class MemoryMapperImpl(
+    val data: UByteArray,
+    val size: ULong,
+    val address: ULong,
+    val closed: () -> Unit
+) : MemMapper {
+    override fun address(): ULong = address
+
+    override fun length(): ULong = size
+
+    override fun close() = closed()
+}
+
 class MemoryArea(val runtime: BpfRuntime) {
 
+    private val mappers = mutableListOf<MemoryMapperImpl>() // base_address | mapper
+    private var nextMapperAddr = MAP_AREA
+
+    // 'data' 不能是副本
+    fun registerMapper(
+        data: UByteArray,
+        size: ULong = data.size.toULong(),
+        closed: () -> Unit
+    ): MemMapper {
+        if (data.isEmpty()) throw BpfException("MemoryArea data is empty")
+
+        val reserved = ((size + 7UL) and 7UL.inv()) + 8UL
+        if (reserved > ULong.MAX_VALUE - nextMapperAddr) {
+            throw BpfException("Virtual address space exhausted")
+        }
+        val address = nextMapperAddr
+        nextMapperAddr += reserved
+
+        val mapper = MemoryMapperImpl(data, size, address, closed)
+        mappers.add(mapper)
+        return mapper
+    }
+
+    fun deleteMapper(mapper: MemMapper) {
+        mapper.close()
+        mappers.remove(mapper)
+    }
+
     fun store(address: ULong, width: AccessSize, data: ULong) = when (address) {
-       // in CONTEXT_AREA until CALLSTACK_AREA -> TODO()
+        // in CONTEXT_AREA until CALLSTACK_AREA -> TODO()
         in CALLSTACK_AREA until MAP_AREA -> storeStackAddress(address, width, data)
+        in MAP_AREA until ULong.MAX_VALUE -> storeMapAddress(address, width, data)
         else -> throw BpfException("Invalid Memory area {store=$address}")
     }
 
     fun load(address: ULong, width: AccessSize): ULong = when (address) {
-      //  in CONTEXT_AREA until CALLSTACK_AREA -> TODO()
+        //  in CONTEXT_AREA until CALLSTACK_AREA -> TODO()
         in CALLSTACK_AREA until MAP_AREA -> loadStackAddress(address, width)
+        in MAP_AREA until ULong.MAX_VALUE -> loadMapAddress(address, width)
         else -> throw BpfException("Invalid Memory area {load=$address.toString()}")
     }
 
-    fun storeStackAddress(addr: ULong, width: AccessSize, data: ULong) {
+    private fun loadMapAddress(address: ULong, width: AccessSize): ULong {
+        for (mapper in mappers)
+            if ((mapper.address() until (mapper.address() + mapper.length())).contains(address)) {
+                return width.load(mapper.data, 0)
+            }
+        throw BpfException("Invalid Memory map area {load=$address}")
+    }
+
+    private fun storeMapAddress(address: ULong, width: AccessSize, data: ULong) {
+        for (mapper in mappers)
+            if ((mapper.address() until (mapper.address() + mapper.length())).contains(address)) {
+                width.store(mapper.data, 0, data)
+                return
+            }
+        throw BpfException("Invalid Memory map area {load=$address}")
+    }
+
+    private fun storeStackAddress(addr: ULong, width: AccessSize, data: ULong) {
         val (frame, offset) = resolveStackAddress(addr) ?: throw BpfException("Invalid stack area $addr")
         width.store(frame.stackMemory, offset, data)
     }
 
-    fun loadStackAddress(addr: ULong, width: AccessSize): ULong {
+    private fun loadStackAddress(addr: ULong, width: AccessSize): ULong {
         val (frame, offset) = resolveStackAddress(addr) ?: throw BpfException("Invalid stack area $addr")
         return width.load(frame.stackMemory, offset)
     }
