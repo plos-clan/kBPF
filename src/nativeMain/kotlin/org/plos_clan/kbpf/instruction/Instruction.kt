@@ -75,6 +75,8 @@ class BpfLongInsn(val fstCmd: UByteArray, val secCmd: UByteArray) : BpfInsn(fstC
     }
 }
 
+object BpfEmptyInsn : BpfInsn(UByteArray(8))
+
 fun BpfRuntime.getSrcValue(cmd: BpfInsn): ULong =
     if (cmd.insnSrc() == BpfInsn.BPF_X) {
         this.register[cmd.srcReg]

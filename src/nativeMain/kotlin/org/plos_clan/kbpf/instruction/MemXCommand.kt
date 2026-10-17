@@ -76,6 +76,7 @@ fun BpfRuntime.ldxMem(cmd: BpfInsn) {
 }
 
 fun BpfRuntime.ldimm64(cmd: BpfLongInsn) {
+    this.getNextCommand() // pop empty cmd
     if (cmd.srcReg != 0.toUByte()) {
         throw BpfException("Unsupported LD IMM64 pseudo source")
     }

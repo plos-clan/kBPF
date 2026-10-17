@@ -23,12 +23,12 @@ class BpfTest {
     }
 
     @Test
-    fun test_simple_jmp() {
+    fun test_long_jmp() {
         val source = loadBin("bpf_base1.bin")
         assertTrue(source.isNotEmpty())
 
         val runtime = BpfRuntime(source)
-        assertEquals(2UL, runtime.run())
+        assertEquals( 0x11111010UL, runtime.run())
     }
 
     @Test

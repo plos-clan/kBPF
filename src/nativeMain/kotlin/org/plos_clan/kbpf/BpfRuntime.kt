@@ -137,6 +137,7 @@ class BpfRuntime(
                     startIndex = 0,
                     endIndex = 5
                 )
+                register[Registers.R10] = topStackFrame().baseAddr + MAX_BPF_STACK
                 continue
             } else break
             when (cmd.insnClass()) {

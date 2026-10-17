@@ -128,6 +128,12 @@ fun BpfRuntime.call(cmd: BpfInsn): Unit = when (cmd.srcReg.toInt()) {
 
 fun BpfRuntime.executeJmp32(cmd: BpfInsn) {
     val op = cmd.insnOpcode()
+
+    if(op == BPF_JA) {
+        this.ja(cmd)
+        return
+    }
+
     val dst32 = register[cmd.dstReg].toUInt()
     val src32 = getSrcValue32(cmd)
 
