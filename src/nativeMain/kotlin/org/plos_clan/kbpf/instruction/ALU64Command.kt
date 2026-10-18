@@ -1,6 +1,7 @@
 package org.plos_clan.kbpf.instruction
 
 import org.plos_clan.kbpf.BpfRuntime
+import org.plos_clan.kbpf.util.BpfException
 
 const val BPF_ADD: UByte = 0x00u
 const val BPF_SUB: UByte = 0x10u
@@ -33,7 +34,7 @@ fun BpfRuntime.alu64Dispatch(cmd: BpfInsn) =
         BPF_ARSH -> this.arsh(cmd)
         BPF_NEG -> this.neg(cmd)
         BPF_END -> this.end(cmd)
-        else -> error("unreachable")
+        else -> throw BpfException("Unreachable code: alu64 ${cmd.insnOpcode().toHexString()}", this)
     }
 
 fun BpfRuntime.add(cmd: BpfInsn) {
@@ -53,18 +54,25 @@ fun BpfRuntime.mul(cmd: BpfInsn) {
 
 fun BpfRuntime.div(cmd: BpfInsn) {
     val src = this.getSrcValue(cmd)
-    if (src == 0uL) {
-        this.register[cmd.dstReg] = 0uL
-    } else {
-        this.register[cmd.dstReg] /= src
+    this.register[cmd.dstReg] = when {
+        src == 0uL ->  0uL
+        cmd.offset == 0.toShort() -> this.register[cmd.dstReg] / src
+        src.toLong() == -1L && this.register[cmd.dstReg].toLong() == Long.MIN_VALUE -> Long.MIN_VALUE.toULong()
+        cmd.offset == 1.toShort() -> (this.register[cmd.dstReg].toLong() / src.toLong()).toULong()
+        else -> throw BpfException("unreachable div", this)
     }
 }
 
 fun BpfRuntime.mod(cmd: BpfInsn) {
     val src = this.getSrcValue(cmd)
-    if (src != 0uL) {
-        this.register[cmd.dstReg] %= src
+    val target = when {
+        src == 0uL ->  0uL
+        cmd.offset == 0.toShort() -> this.register[cmd.dstReg] % src
+        src.toLong() == -1L && this.register[cmd.dstReg].toLong() == Long.MIN_VALUE -> 0UL
+        cmd.offset == 1.toShort() -> (this.register[cmd.dstReg].toLong() % src.toLong()).toULong()
+        else -> throw BpfException("unreachable mod", this)
     }
+    this.register[cmd.dstReg] = target
 }
 
 fun BpfRuntime.or(cmd: BpfInsn) {
@@ -103,45 +111,51 @@ fun BpfRuntime.neg(cmd: BpfInsn) {
 }
 
 fun BpfRuntime.end(cmd: BpfInsn) {
-    val dst = cmd.dstReg
     val width = cmd.imm
-    val toBe = (cmd.code and 0x08u) != 0u.toUByte()   // true = BPF_TO_BE
+    if (width != 16 && width != 32 && width != 64) {
+        throw BpfException("BPF_END only supports widths 16 / 32 / 64, got $width", this)
+    }
 
-    val value = this.register[dst]
-
-    this.register[dst] = when (width) {
-        16 -> {
-            val v = value and 0xFFFFuL
-            val swapped = ((v and 0xFFuL) shl 8) or ((v and 0xFF00uL) shr 8)
-            if (toBe) swapped else v
+    val swap = when (cmd.insnClass()) {
+        BpfInsn.BPF_ALU -> cmd.insnSrc() == BpfInsn.BPF_X
+        BpfInsn.BPF_ALU64 -> {
+            if (cmd.insnSrc() != BpfInsn.BPF_K) {
+                throw BpfException("ALU64 BPF_END requires the source bit to be zero", this)
+            }
+            true
         }
+        else -> throw BpfException("Invalid instruction class for BPF_END", this)
+    }
 
-        32 -> {
-            val v = value and 0xFFFFFFFFuL
-            val swapped = ((v and 0xFFuL) shl 24) or
-                    ((v and 0xFF00uL) shl 8) or
-                    ((v and 0xFF0000uL) shr 8) or
-                    ((v and 0xFF000000uL) shr 24)
-            if (toBe) swapped else v
+    val value = register[cmd.dstReg]
+    register[cmd.dstReg] = if (swap) {
+        var remaining = value
+        var result = 0UL
+        repeat(width / 8) {
+            result = (result shl 8) or (remaining and 0xFFUL)
+            remaining = remaining shr 8
         }
-
-        64 -> {
-            val swapped =
-                ((value and 0xFFuL) shl 56) or
-                        ((value and 0xFF00uL) shl 40) or
-                        ((value and 0xFF0000uL) shl 24) or
-                        ((value and 0xFF000000uL) shl 8) or
-                        ((value and 0xFF00000000uL) shr 8) or
-                        ((value and 0xFF0000000000uL) shr 24) or
-                        ((value and 0xFF000000000000uL) shr 40) or
-                        ((value and 0xFF00000000000000uL) shr 56)
-            if (toBe) swapped else value
+        result
+    } else {
+        when (width) {
+            16 -> value.toUShort().toULong()
+            32 -> value.toUInt().toULong()
+            else -> value
         }
-
-        else -> error("BPF_END only supports imm = 16 / 32 / 64, got $width")
     }
 }
 
 fun BpfRuntime.mov64(cmd: BpfInsn)  {
-    this.register[cmd.dstReg] = this.getSrcValue(cmd)
+    if (cmd.offset.toInt() != 0 && cmd.insnSrc() != BpfInsn.BPF_X) {
+        throw BpfException("MOVSX requires a register source", this)
+    }
+
+    val src = getSrcValue(cmd)
+    register[cmd.dstReg] = when (cmd.offset.toInt()) {
+        0 -> src
+        8 -> src.toByte().toLong().toULong()
+        16 -> src.toShort().toLong().toULong()
+        32 -> src.toInt().toLong().toULong()
+        else -> throw BpfException("Invalid MOV64 offset: ${cmd.offset}", this)
+    }
 }

@@ -35,7 +35,7 @@ fun BpfRuntime.jmpDispatch(cmd: BpfInsn) {
         BPF_JSLE -> this.jsle(cmd)
         BPF_JLE -> this.jle(cmd)
         BPF_JLT -> this.jlt(cmd)
-        else -> error("unreachable")
+        else -> throw BpfException("Unreachable code: jmp ${cmd.insnOpcode().toHexString()}", this)
     }
 }
 
@@ -123,14 +123,14 @@ fun BpfRuntime.call(cmd: BpfInsn): Unit = when (cmd.srcReg.toInt()) {
         register.pc += cmd.imm
     }
 
-    else -> throw BpfException("Invalid CALL src_reg: ${cmd.srcReg}")
+    else -> throw BpfException("Invalid CALL src_reg: ${cmd.srcReg}", this)
 }
 
 fun BpfRuntime.executeJmp32(cmd: BpfInsn) {
     val op = cmd.insnOpcode()
 
     if(op == BPF_JA) {
-        this.ja(cmd)
+        this.register.pc += cmd.imm
         return
     }
 
@@ -152,7 +152,7 @@ fun BpfRuntime.executeJmp32(cmd: BpfInsn) {
         BPF_JSGE -> signedDst >= signedSrc
         BPF_JSLT -> signedDst <  signedSrc
         BPF_JSLE -> signedDst <= signedSrc
-        else -> throw IllegalArgumentException("Unsupported JMP32 op")
+        else -> throw BpfException("Unreachable code: jmp32 ${cmd.insnOpcode().toHexString()}", this)
     }
 
     if (shouldJump) {

@@ -120,13 +120,13 @@ class BpfRuntime(
         return frame
     }
 
-    fun run(): ULong {
+    fun run(): ULong = try {
         this.status = Status.CHECKING
         this.insnList = Verifier.checkSource(source)
         this.status = Status.RUNNING
         createStackFrame(type = StackFrame.Type.ROOT)
         while (true) {
-            val cmd = this.getNextCommand() ?: throw BpfException("failed to run ebpf command: illegal end")
+            val cmd = this.getNextCommand() ?: throw BpfException("failed to run ebpf command: illegal end", this)
             if (cmd.isExit()) if (topStackFrame().type == StackFrame.Type.USER) {
                 val frame = callStack.removeLast()
                 register[Registers.R10] -= MAX_BPF_STACK
@@ -154,6 +154,9 @@ class BpfRuntime(
         }
         this.status = Status.EXITED
         return this.register[Registers.R0]
+    } catch (error: BpfException) {
+        println(error.dumpRuntimeInfo())
+        1UL
     }
 
     enum class Status {
